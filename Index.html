@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenWiki - The Free Encyclopedia</title>
+    <meta name="description" content="A React-based Wiki Engine with editing, search, and AI features.">
+
+    <!-- 1. Tailwind CSS (Styling) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- 2. Import Map (Dependency Management) -->
+    <!-- This tells the browser where to find 'react', 'firebase', etc. -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.292.0",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
+      }
+    }
+    </script>
+
+    <!-- 3. Babel (Enables JSX in the browser without a build step) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Custom Styles that Tailwind doesn't cover */
+        body {
+            overscroll-behavior-y: none; /* Prevent bounce on mobile */
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-white text-gray-900 font-sans">
+    <!-- The Root Element where React attaches -->
+    <div id="root"></div>
+
+    <!-- MAIN APPLICATION SCRIPT -->
+    <!-- type="text/babel" allows us to write JSX. data-type="module" allows imports. -->
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Search, Menu, Globe, Edit3, Save, X, ExternalLink, History, BookOpen, Shuffle, Sparkles, Loader2, PlusCircle, Upload, FileText, User, MessageSquare, List, Lock, Mail, ArrowRight, LogOut, CheckCircle2, PenTool, Eraser, Trash2, Image as ImageIcon, Undo } from 'lucide-react';
+        import { initializeApp } from "firebase/app";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, signInAnonymously } from "firebase/auth";
+        import { getFirestore } from "firebase/firestore";
+
+        // --- CONFIGURATION ---
+        // TODO: Replace this object with your OWN Firebase config from the Firebase Console
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "your-app.firebaseapp.com",
+            projectId: "your-app-id",
+            storageBucket: "your-app.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        // --- GEMINI API KEY ---
+        // TODO: Insert your Gemini API Key here for AI features to work
+        const apiKey = ""; 
+
+        // Initialize Firebase
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase initialization failed. Make sure to update the config object.", e);
+        }
+
+        // --- MOCK DATA ---
+        const INITIAL_ARTICLES = {
+            'main_page': {
+                title: 'Main Page',
+                content: `Welcome to **OpenWiki**, the free encyclopedia that anyone can edit.
+                
+                This is a demonstration of a wiki engine built entirely in React. It features article navigation, search functionality, and a live editor.
+                
+                == Featured Article ==
+                **Top-level domain** (TLD) is one of the domains at the highest level in the hierarchical Domain Name System of the Internet. The top-level domain names are installed in the root zone of the name space. For all domains in lower levels, it is the last part of the domain name, that is, the last non-empty label of a fully qualified domain name.
+                
+                == Getting Started ==
+                * Try searching for "React" or "JavaScript".
+                * Click "Random Article" in the sidebar.
+                * Click "New Article" to write something new!
+                * Click the "Edit" tab to modify any page!`,
+                categories: ['Portals', 'Main'],
+                lastEdited: '2023-10-27',
+                infobox: null
+            },
+            'top_level_domain': {
+                title: 'Top-level domain',
+                content: `A **top-level domain** (TLD) is one of the domains at the highest level in the hierarchical Domain Name System (DNS) of the Internet.
+                
+                == History ==
+                Originally, the top-level domain space was organized into three main groups: Countries, Categories, and Multiorganizations.
+                
+                == Types of TLDs ==
+                * **Infrastructure top-level domain** (ARPA)
+                * **Generic top-level domains** (gTLD): used for general purposes (e.g., .com, .net, .org).
+                * **Country code top-level domains** (ccTLD): used for specific countries or regions (e.g., .us, .in, .uk).
+                
+                == Reservation ==
+                The Internet Corporation for Assigned Names and Numbers (ICANN) manages the TLDs.`,
+                categories: ['Internet', 'DNS', 'Computing'],
+                lastEdited: '2023-11-15',
+                infobox: {
+                title: 'Top-level domain',
+                image: '🌐',
+                data: [
+                    { label: 'Administrator', value: 'ICANN' },
+                    { label: 'Introduced', value: '1985' },
+                    { label: 'Purpose', value: 'Internet addressing' }
+                ]
+                }
+            },
+            'react': {
+                title: 'React (software)',
+                content: `**React** (also known as React.js or ReactJS) is a free and open-source front-end JavaScript library for building user interfaces based on components.
+                
+                == Overview ==
+                It is maintained by Meta (formerly Facebook) and a community of individual developers and companies. React can be used to develop single-page, mobile, or server-rendered applications with frameworks like Next.js.
+                
+                == Features ==
+                * **Declarative:** React makes it painless to create interactive UIs.
+                * **Component-Based:** Build encapsulated components that manage their own state.
+                
+                == Virtual DOM ==
+                React creates an in-memory data structure cache, computes the resulting differences, and then updates the browser's displayed DOM efficiently.`,
+                categories: ['Software', 'JavaScript', 'Web development'],
+                lastEdited: '2023-12-01',
+                infobox: {
+                title: 'React',
+                image: '⚛️',
+                data: [
+                    { label: 'Original author', value: 'Jordan Walke' },
+                    { label: 'Developer', value: 'Meta' },
+                    { label: 'Initial release', value: 'May 29, 2013' },
+                    { label: 'Written in', value: 'JavaScript' }
+                ]
+                }
+            },
+            'javascript': {
+                title: 'JavaScript',
+                content: `**JavaScript** (JS) is a programming language and core technology of the World Wide Web, alongside HTML and CSS. As of 2024, 98.8% of websites use JavaScript on the client side for webpage behavior.
+                
+                == Usage ==
+                JavaScript engines were originally used only in web browsers, but are now core components of some servers and a variety of applications. The most popular runtime system for this usage is Node.js.`,
+                categories: ['Programming languages', 'Web technology'],
+                lastEdited: '2024-01-10',
+                infobox: {
+                title: 'JavaScript',
+                image: '📜',
+                data: [
+                    { label: 'Paradigm', value: 'Multi-paradigm' },
+                    { label: 'Designed by', value: 'Brendan Eich' },
+                    { label: 'First appeared', value: 'December 4, 1995' }
+                ]
+                }
+            }
+        };
+
+        // --- HELPER FUNCTIONS ---
+        const slugify = (text) => text.toLowerCase().replace(/ /g, '_').replace(/[^\w-]+/g, '');
+        const deslugify = (slug) => slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+        // --- COMPONENTS ---
+        const Logo = () => (
+            <div className="flex items-center gap-2 mb-6 px-4">
+                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border border-gray-300 shadow-sm shrink-0">
+                <Globe className="w-6 h-6 text-gray-600" />
+                </div>
+                <div>
+                <h1 className="font-serif text-xl leading-none font-bold text-gray-900">OpenWiki</h1>
+                <p className="text-[10px] text-gray-500 font-sans">The Free Encyclopedia</p>
+                </div>
+            </div>
+        );
+
+        const Infobox = ({ data }) => {
+            if (!data) return null;
+            return (
+                <div className="w-full md:w-72 md:float-right md:ml-6 mb-6 border border-gray-300 bg-gray-50 text-sm shadow-sm rounded-sm">
+                <div className="bg-gray-200 p-2 text-center font-bold border-b border-gray-300">
+                    {data.title}
+                </div>
+                {data.image && (
+                    <div className="p-4 text-center text-6xl bg-white border-b border-gray-300">
+                    {data.image}
+                    </div>
+                )}
+                <table className="w-full text-left">
+                    <tbody>
+                    {data.data.map((row, idx) => (
+                        <tr key={idx} className="border-b border-gray-200 last:border-0">
+                        <th className="py-2 px-3 font-semibold text-gray-700 w-1/3 align-top">{row.label}</th>
+                        <td className="py-2 px-3 text-gray-900">{row.value}</td>
+                        </tr>
+                    ))}
+                    </tbody>
+                </table>
+                </div>
+            );
+        };
+
+        const DrawingPad = ({ onSave, onClose }) => {
+            const canvasRef = useRef(null);
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [color, setColor] = useState('#000000');
+            const [lineWidth, setLineWidth] = useState(2);
+            const [tool, setTool] = useState('pen');
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }, []);
+
+            const getCoordinates = (event) => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                if (event.touches && event.touches[0]) {
+                    return {
+                        x: (event.touches[0].clientX - rect.left) * scaleX,
+                        y: (event.touches[0].clientY - rect.top) * scaleY
+                    };
+                }
+                return {
+                    x: (event.clientX - rect.left) * scaleX,
+                    y: (event.clientY - rect.top) * scaleY
+                };
+            };
+
+            const startDrawing = (e) => {
+                if(e.type === 'touchstart') e.preventDefault();
+                const { x, y } = getCoordinates(e);
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                setIsDrawing(true);
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+                if(e.type === 'touchmove') e.preventDefault();
+                const { x, y } = getCoordinates(e);
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+                ctx.lineWidth = tool === 'eraser' ? 20 : lineWidth;
+                ctx.lineCap = 'round';
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            };
+
+            const stopDrawing = () => setIsDrawing(false);
+            
+            const clearCanvas = () => {
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            };
+
+            const handleSave = () => {
+                const dataUrl = canvasRef.current.toDataURL('image/png');
+                onSave(dataUrl);
+            };
+
+            return (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+                    <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h3 className="font-serif font-bold text-lg flex items-center gap-2">
+                        <PenTool className="w-5 h-5" /> Insert Drawing
+                    </h3>
+                    <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full">
+                        <X className="w-6 h-6 text-gray-500" />
+                    </button>
+                    </div>
+                    <div className="flex flex-wrap gap-4 p-4 border-b border-gray-100 bg-gray-50 items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setTool('pen')} className={`p-2 rounded ${tool === 'pen' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500' : 'hover:bg-gray-200'}`} title="Pen"><PenTool className="w-5 h-5" /></button>
+                            <button onClick={() => setTool('eraser')} className={`p-2 rounded ${tool === 'eraser' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500' : 'hover:bg-gray-200'}`} title="Eraser"><Eraser className="w-5 h-5" /></button>
+                            <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                            <div className="flex gap-1">
+                            {['#000000', '#dc2626', '#2563eb', '#16a34a', '#d97706'].map(c => (
+                                <button key={c} onClick={() => { setColor(c); setTool('pen'); }} className={`w-6 h-6 rounded-full border border-gray-300 ${color === c && tool === 'pen' ? 'ring-2 ring-offset-2 ring-blue-500' : ''}`} style={{ backgroundColor: c }} />
+                            ))}
+                            </div>
+                        </div>
+                        <button onClick={clearCanvas} className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /> Clear</button>
+                    </div>
+                    <div className="flex-1 bg-gray-100 p-4 overflow-hidden relative touch-none">
+                    <canvas ref={canvasRef} className="w-full h-full bg-white shadow-sm rounded touch-none cursor-crosshair border border-gray-300" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
+                    </div>
+                    <div className="p-4 border-t border-gray-200 flex justify-end gap-3 bg-white rounded-b-lg">
+                    <button onClick={onClose} className="px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded">Cancel</button>
+                    <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white font-bold rounded shadow hover:bg-blue-700 flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Insert into Article</button>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        const AuthPage = ({ onManualLogin }) => {
+            const [isSignUp, setIsSignUp] = useState(false);
+            const [formData, setFormData] = useState({ username: '', password: '', email: '' });
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+
+            const handleManualSubmit = (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+                setTimeout(() => {
+                    if (!formData.username || !formData.password) {
+                        setError('Please fill in all required fields.');
+                        setLoading(false);
+                        return;
+                    }
+                    onManualLogin({ username: formData.username, isAnonymous: true });
+                }, 800);
+            };
+
+            const handleGoogleSignIn = async () => {
+                setLoading(true);
+                setError('');
+                if (!auth) {
+                    setError("Authentication is not initialized. Check your config.");
+                    setLoading(false);
+                    return;
+                }
+                try {
+                    const provider = new GoogleAuthProvider();
+                    await signInWithPopup(auth, provider);
+                } catch (err) {
+                    console.error(err);
+                    setError("Failed to sign in. " + err.message);
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="flex justify-center items-start pt-12 min-h-[500px]">
+                <div className="w-full max-w-md bg-white p-8 border border-gray-200 shadow-sm rounded-sm">
+                    <h2 className="text-2xl font-serif font-bold text-gray-900 mb-6 flex items-center gap-2">
+                    <User className="w-6 h-6 text-gray-600" />
+                    {isSignUp ? 'Create account' : 'Log in'}
+                    </h2>
+                    {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4 text-sm">{error}</div>}
+                    <div className="bg-blue-50 border border-blue-100 p-4 mb-6 rounded text-sm text-blue-800">
+                    {isSignUp ? "Join OpenWiki to contribute to the free encyclopedia." : "Welcome back! Please log in to edit your favorite articles."}
+                    </div>
+                    <button onClick={handleGoogleSignIn} className="w-full bg-white border border-gray-300 text-gray-700 font-bold py-2 px-4 rounded shadow-sm hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-all flex justify-center items-center gap-2 mb-6">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" style={{ color: '#4285F4' }} /><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" style={{ color: '#34A853' }} /><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z" style={{ color: '#FBBC05' }} /><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" style={{ color: '#EA4335' }} /></svg>
+                    Sign in with Google
+                    </button>
+                    <div className="relative mb-6">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300"></div></div>
+                    <div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-gray-500">Or continue with username</span></div>
+                    </div>
+                    <form onSubmit={handleManualSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Username</label>
+                        <div className="relative"><User className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="text" className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" placeholder="Enter your username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} /></div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
+                        <div className="relative"><Lock className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="password" className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" placeholder="Enter your password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} /></div>
+                    </div>
+                    {isSignUp && (<div><label className="block text-sm font-bold text-gray-700 mb-1">Email address (optional)</label><div className="relative"><Mail className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="email" className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" placeholder="name@example.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} /></div></div>)}
+                    <div className="pt-2"><button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded shadow-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all flex justify-center items-center gap-2">{loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}{isSignUp ? 'Create account' : 'Log in'}</button></div>
+                    </form>
+                    <div className="mt-6 pt-6 border-t border-gray-100 text-center"><p className="text-sm text-gray-600 mb-2">{isSignUp ? 'Already have an account?' : 'Don’t have an account?'}</p><button onClick={() => { setIsSignUp(!isSignUp); setError(''); setFormData({ username: '', password: '', email: '' }); }} className="text-blue-600 font-semibold hover:underline text-sm">{isSignUp ? 'Log in instead' : 'Join OpenWiki'}</button></div>
+                </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP COMPONENT ---
+        const WikiApp = () => {
+            const [articles, setArticles] = useState(INITIAL_ARTICLES);
+            const [currentSlug, setCurrentSlug] = useState('main_page');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [isEditing, setIsEditing] = useState(false);
+            const [editContent, setEditContent] = useState('');
+            const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+            const [searchResults, setSearchResults] = useState([]);
+            const [showDrawingPad, setShowDrawingPad] = useState(false);
+            const [user, setUser] = useState(null);
+            const [isSummarizing, setIsSummarizing] = useState(false);
+            const [isExpanding, setIsExpanding] = useState(false);
+            const [summary, setSummary] = useState(null);
+            const [aiError, setAiError] = useState(null);
+            const fileInputRef = useRef(null);
+            const imageInputRef = useRef(null);
+
+            const articleExists = !!articles[currentSlug];
+            const isLoginPage = currentSlug === 'special:login';
+            const currentArticle = articles[currentSlug] || { title: isLoginPage ? 'Log in' : deslugify(currentSlug), content: '', categories: [] };
+
+            useEffect(() => {
+                if (!auth) return;
+                const initAuth = async () => {
+                    // Try to sign in anonymously if no user (requires enabled Anonymous auth in Firebase)
+                    if (!auth.currentUser) {
+                       try { await signInAnonymously(auth); } catch(e) { console.warn("Anon auth failed", e); }
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+                    if (firebaseUser && !firebaseUser.isAnonymous) {
+                        setUser({ 
+                            username: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User'), 
+                            isAnonymous: false,
+                            photoURL: firebaseUser.photoURL
+                        });
+                        if (currentSlug === 'special:login') handleNavigate('main_page');
+                    } else {
+                        // Handle anon or logout
+                    }
+                });
+                return () => unsubscribe();
+            }, [currentSlug]);
+
+            useEffect(() => {
+                if (!searchQuery.trim()) { setSearchResults([]); return; }
+                const results = Object.keys(articles).filter(slug => articles[slug].title.toLowerCase().includes(searchQuery.toLowerCase()));
+                setSearchResults(results);
+            }, [searchQuery, articles]);
+
+            const handleNavigate = (slug) => {
+                setCurrentSlug(slug); setIsEditing(false); setSearchQuery(''); setMobileMenuOpen(false); setSummary(null); setAiError(null); window.scrollTo(0, 0);
+            };
+
+            const handleManualLogin = (userData) => { setUser(userData); handleNavigate('main_page'); };
+            const handleLogout = async () => {
+                if (auth && user && !user.isAnonymous) { await signOut(auth); setUser(null); signInAnonymously(auth); } else { setUser(null); }
+                handleNavigate('main_page');
+            };
+
+            const handleCreateNew = () => {
+                const title = prompt("Enter the title for the new article:");
+                if (title) {
+                    const slug = slugify(title); handleNavigate(slug);
+                    if (!articles[slug]) { setEditContent(`'''${title}''' is...`); setIsEditing(true); }
+                }
+            };
+
+            const handleRandom = () => {
+                const slugs = Object.keys(articles); const randomSlug = slugs[Math.floor(Math.random() * slugs.length)]; handleNavigate(randomSlug);
+            };
+
+            const handleSave = () => {
+                setArticles(prev => ({
+                    ...prev,
+                    [currentSlug]: { ...(prev[currentSlug] || {}), title: currentArticle.title, content: editContent, lastEdited: new Date().toISOString().split('T')[0], categories: prev[currentSlug]?.categories || ['Uncategorized'] }
+                }));
+                setIsEditing(false);
+            };
+
+            const startEditing = () => { setEditContent(currentArticle.content); setIsEditing(true); setSummary(null); };
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (file) { const reader = new FileReader(); reader.onload = (e) => setEditContent(prev => prev + (prev ? '\n\n' : '') + e.target.result); reader.readAsText(file); }
+            };
+            const handleImageUpload = (event) => {
+                const file = event.target.files[0];
+                if (file) { const reader = new FileReader(); reader.onload = (e) => setEditContent(prev => prev + `\n![Uploaded Image](${e.target.result})\n`); reader.readAsDataURL(file); }
+            };
+            const handleInsertDrawing = (dataUrl) => { setEditContent(prev => prev + `\n![Drawing](${dataUrl})\n`); setShowDrawingPad(false); };
+
+            const generateWithGemini = async (prompt) => {
+                if (!apiKey) throw new Error("API Key is missing in configuration.");
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+                });
+                if (!response.ok) throw new Error('Failed to fetch from Gemini API');
+                const data = await response.json();
+                return data.candidates[0].content.parts[0].text;
+            };
+
+            const handleAISummarize = async () => {
+                setIsSummarizing(true); setAiError(null);
+                try { const res = await generateWithGemini(`Summarize the following article content into exactly 3 bullet points: ${currentArticle.content}`); setSummary(res); } catch (err) { setAiError(err.message); } finally { setIsSummarizing(false); }
+            };
+            const handleAIExpand = async () => {
+                setIsExpanding(true); setAiError(null);
+                try { const res = await generateWithGemini(`Read the following article content and write 1 or 2 new paragraphs to expand it: ${editContent}`); setEditContent(prev => prev + "\n\n" + res); } catch (err) { setAiError(err.message); } finally { setIsExpanding(false); }
+            };
+
+            const parseContent = (text) => {
+                if (!text) return <p className="italic text-gray-500">This page is currently empty.</p>;
+                return text.split('\n').map((line, i) => {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('![') && trimmed.includes('](') && trimmed.endsWith(')')) {
+                        const match = trimmed.match(/!\[(.*?)\]\((.*?)\)/);
+                        if (match) return <div key={i} className="flex justify-center my-6"><img src={match[2]} alt={match[1]} className="max-w-full h-auto border border-gray-200 rounded shadow-sm" /></div>;
+                    }
+                    if (trimmed.startsWith('== ') && trimmed.endsWith(' ==')) return <h2 key={i} className="text-xl md:text-2xl font-serif border-b border-gray-300 pb-1 mt-6 mb-3 text-gray-900">{trimmed.replace(/==/g, '').trim()}</h2>;
+                    if (trimmed.startsWith('* ')) {
+                        const content = trimmed.substring(2);
+                        const parts = content.split(/(\*\*.*?\*\*|'''.*?''')/g);
+                        return <li key={i} className="ml-5 md:ml-6 list-disc mb-1 text-base leading-relaxed">{parts.map((part, idx) => { if (part.startsWith('**') && part.endsWith('**')) return <b key={idx}>{part.slice(2, -2)}</b>; if (part.startsWith("'''") && part.endsWith("'''")) return <b key={idx}>{part.slice(3, -3)}</b>; return part; })}</li>;
+                    }
+                    if (trimmed.length > 0) {
+                        const parts = line.split(/(\*\*.*?\*\*|'''.*?''')/g);
+                        return <p key={i} className="mb-4 text-base leading-relaxed text-gray-800">{parts.map((part, idx) => { if (part.startsWith('**') && part.endsWith('**')) return <b key={idx}>{part.slice(2, -2)}</b>; if (part.startsWith("'''") && part.endsWith("'''")) return <b key={idx}>{part.slice(3, -3)}</b>; return part; })}</p>;
+                    }
+                    return null;
+                });
+            };
+
+            return (
+                <div className="min-h-screen bg-white text-gray-900 font-sans flex flex-col md:flex-row">
+                    {showDrawingPad && <DrawingPad onSave={handleInsertDrawing} onClose={() => setShowDrawingPad(false)} />}
+                    {mobileMenuOpen && <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden transition-opacity" onClick={() => setMobileMenuOpen(false)} />}
+                    
+                    <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-gray-50 border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 md:static flex flex-col ${mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+                        <div className="p-4 flex-1 overflow-y-auto">
+                            <button className="md:hidden absolute top-4 right-4 p-2 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors" onClick={() => setMobileMenuOpen(false)}><X className="w-5 h-5 text-gray-600" /></button>
+                            <div className="mt-2 md:mt-0 cursor-pointer" onClick={() => handleNavigate('main_page')}><Logo /></div>
+                            <nav className="space-y-6 px-4 mt-8">
+                                <div>
+                                    <ul className="space-y-3 text-sm text-gray-700">
+                                        <li><button onClick={() => handleNavigate('main_page')} className="hover:text-blue-600 hover:bg-gray-200 -mx-2 px-2 py-1 rounded w-full text-left flex items-center gap-3 transition-colors"><Globe className="w-4 h-4 text-gray-500" /> Main page</button></li>
+                                        <li><button onClick={handleRandom} className="hover:text-blue-600 hover:bg-gray-200 -mx-2 px-2 py-1 rounded w-full text-left flex items-center gap-3 transition-colors"><Shuffle className="w-4 h-4 text-gray-500" /> Random article</button></li>
+                                        <li><button onClick={handleCreateNew} className="hover:text-green-700 hover:bg-green-50 -mx-2 px-2 py-1 rounded w-full text-left flex items-center gap-3 text-green-700 font-medium transition-colors"><PlusCircle className="w-4 h-4" /> New Article</button></li>
+                                    </ul>
+                                </div>
+                                <div className="pt-4 border-t border-gray-200"><h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Contribute</h3><ul className="space-y-3 text-sm text-gray-600"><li className="flex items-center gap-3 opacity-60 hover:opacity-100 cursor-pointer transition-opacity"><BookOpen className="w-4 h-4" /> Help & Guides</li><li className="flex items-center gap-3 opacity-60 hover:opacity-100 cursor-pointer transition-opacity"><History className="w-4 h-4" /> Recent changes</li></ul></div>
+                                <div className="md:hidden pt-4 border-t border-gray-200"><h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">User</h3><ul className="space-y-3 text-sm text-gray-600">{user ? (<><li className="flex items-center gap-3 font-bold text-blue-800"><User className="w-4 h-4"/> {user.username}</li><li onClick={handleLogout} className="flex items-center gap-3 cursor-pointer hover:text-red-600"><LogOut className="w-4 h-4"/> Log out</li></>) : (<li onClick={() => handleNavigate('special:login')} className="flex items-center gap-3 cursor-pointer hover:text-blue-600"><User className="w-4 h-4"/> Log in / Sign up</li>)}</ul></div>
+                            </nav>
+                        </div>
+                    </aside>
+
+                    <main className="flex-1 flex flex-col min-w-0 bg-white">
+                        <header className="h-16 border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 bg-white/95 backdrop-blur z-30 shadow-sm">
+                            <div className="flex items-center gap-3 flex-1">
+                                <button className="md:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full" onClick={() => setMobileMenuOpen(true)}><Menu className="w-6 h-6" /></button>
+                                <div className="relative group w-full max-w-md">
+                                    <div className="flex items-center border border-gray-300 rounded overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500 w-full transition-all bg-gray-50 focus-within:bg-white">
+                                        <input type="text" placeholder="Search OpenWiki" className="px-3 py-2 outline-none text-sm w-full bg-transparent" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                        <button className="p-2 border-l border-gray-300 hover:bg-gray-200 text-gray-500"><Search className="w-4 h-4" /></button>
+                                    </div>
+                                    {searchQuery && (<div className="absolute top-full left-0 w-full bg-white border border-gray-300 shadow-xl mt-1 rounded-sm z-50 max-h-80 overflow-y-auto">{searchResults.length > 0 ? (searchResults.map(slug => (<div key={slug} className="px-4 py-3 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-0" onClick={() => handleNavigate(slug)}><span className="font-bold text-gray-800">{articles[slug].title}</span></div>))) : (<div className="px-4 py-3 text-blue-600 hover:bg-blue-50 cursor-pointer text-sm flex items-center gap-2 font-medium" onClick={() => handleNavigate(slugify(searchQuery))}><PlusCircle className="w-4 h-4" /> Create page "{searchQuery}"</div>)}</div>)}
+                                </div>
+                            </div>
+                            <div className="hidden md:flex items-center gap-4 text-xs md:text-sm">
+                                {user ? (<><span className="font-medium text-gray-700 flex items-center gap-2">{user.photoURL ? (<img src={user.photoURL} alt={user.username} className="w-5 h-5 rounded-full" />) : (<User className="w-3 h-3 text-gray-500" />)}{user.username}</span><button className="text-blue-600 hover:underline font-medium hover:bg-blue-50 px-2 py-1 rounded transition-colors">Talk</button><button onClick={handleLogout} className="text-gray-500 hover:text-red-600 hover:underline font-medium hover:bg-red-50 px-2 py-1 rounded transition-colors">Log out</button></>) : (<><span className="text-gray-500">Not logged in</span><button className="text-blue-600 hover:underline font-medium hover:bg-blue-50 px-2 py-1 rounded transition-colors">Talk</button><button className="text-blue-600 hover:underline font-medium hover:bg-blue-50 px-2 py-1 rounded transition-colors">Contributions</button><button onClick={() => handleNavigate('special:login')} className="bg-blue-600 text-white font-medium px-3 py-1.5 rounded hover:bg-blue-700 transition-colors shadow-sm">Log in</button></>)}
+                            </div>
+                        </header>
+
+                        {isLoginPage ? <AuthPage onManualLogin={handleManualLogin} /> : (
+                            <>
+                                <div className="px-4 md:px-8 pt-6 flex items-end border-b border-gray-200 bg-white overflow-x-auto no-scrollbar">
+                                    <div className="flex gap-1 shrink-0"><button onClick={() => setIsEditing(false)} disabled={!articleExists && !isEditing} className={`px-4 py-2 text-sm font-medium rounded-t border-t border-l border-r transition-all ${!isEditing ? 'bg-white border-gray-200 border-b-white z-10 -mb-px text-gray-900' : 'bg-gray-50 border-transparent text-blue-600 hover:text-blue-800'}`}>Article</button><button className="px-4 py-2 text-sm font-medium rounded-t text-blue-600 hover:underline hover:bg-gray-50 transition-colors">Talk</button></div>
+                                    <div className="flex-1 border-b border-gray-200 min-w-[20px]"></div>
+                                    <div className="flex gap-1 shrink-0"><button onClick={() => setIsEditing(false)} disabled={!articleExists} className={`px-4 py-2 text-sm font-medium rounded-t transition-all ${!isEditing ? 'bg-white border-gray-200 border-t border-l border-r border-b-white z-10 -mb-px' : 'text-blue-600 hover:underline'}`}>Read</button><button onClick={startEditing} className={`px-4 py-2 text-sm font-medium rounded-t transition-all ${isEditing ? 'bg-white border-gray-200 border-t border-l border-r border-b-white z-10 -mb-px text-gray-900' : 'text-blue-600 hover:underline'}`}>{articleExists ? 'Edit' : 'Create'}</button><button className="px-4 py-2 text-sm font-medium rounded-t text-blue-600 hover:underline whitespace-nowrap">View history</button></div>
+                                </div>
+                                <div className="p-4 md:p-8 max-w-5xl w-full mx-auto">
+                                    {isEditing ? (
+                                        <div className="space-y-4">
+                                            <div className="bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800 mb-4 rounded flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                                                <div><strong>{articleExists ? 'Editing mode:' : 'Creating mode:'}</strong> You are {articleExists ? 'editing' : 'creating'} "{currentArticle.title}".</div>
+                                                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                                                    <button onClick={() => fileInputRef.current.click()} className="flex justify-center items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded text-xs font-bold shadow-sm hover:bg-gray-50 transition-all"><Upload className="w-3 h-3" /> Import</button><input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".txt,.md,.json" className="hidden" />
+                                                    <button onClick={() => imageInputRef.current.click()} className="flex justify-center items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded text-xs font-bold shadow-sm hover:bg-gray-50 transition-all"><ImageIcon className="w-3 h-3" /> Image</button><input type="file" ref={imageInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+                                                    <button onClick={() => setShowDrawingPad(true)} className="flex justify-center items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded text-xs font-bold shadow-sm hover:bg-gray-50 transition-all"><PenTool className="w-3 h-3" /> Draw</button>
+                                                    <button onClick={handleAIExpand} disabled={isExpanding} className="flex justify-center items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded text-xs font-bold shadow hover:from-purple-600 hover:to-indigo-700 disabled:opacity-50 transition-all">{isExpanding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} {isExpanding ? 'Writing...' : 'Continue Writing'}</button>
+                                                </div>
+                                            </div>
+                                            <input type="text" value={currentArticle.title} onChange={(e) => { if (!articleExists) { currentArticle.title = e.target.value; setEditContent(prev => prev); } }} disabled={articleExists} className="w-full text-2xl md:text-3xl font-serif border-b border-gray-300 pb-2 mb-4 bg-transparent text-gray-900 focus:outline-none focus:border-blue-500" placeholder="Page Title" />
+                                            <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="w-full h-[60vh] md:h-[500px] border border-gray-300 p-4 font-mono text-sm md:text-base focus:ring-2 focus:ring-blue-500 outline-none resize-y rounded shadow-inner" placeholder="Write your article content here... Use == Header == for sections." />
+                                            <div className="flex items-center justify-between sticky bottom-4 z-20"><div className="flex gap-3 w-full md:w-auto"><button onClick={handleSave} className="flex-1 md:flex-none px-6 py-2.5 bg-blue-600 text-white font-bold rounded shadow-sm hover:bg-blue-700 text-sm transition-all">{articleExists ? 'Save changes' : 'Publish page'}</button><button onClick={() => setIsEditing(false)} className="flex-1 md:flex-none px-6 py-2.5 bg-gray-100 text-gray-700 font-bold rounded shadow-sm hover:bg-gray-200 text-sm transition-all">Cancel</button></div>{aiError && <span className="text-red-500 text-xs hidden md:inline">{aiError}</span>}</div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {articleExists ? (
+                                                <>
+                                                    <div className="border-b border-gray-300 mb-6 pb-2 flex flex-col md:flex-row md:items-end justify-between gap-2"><h1 className="text-3xl md:text-4xl font-serif text-gray-900">{currentArticle.title}<div className="text-xs font-sans font-normal text-gray-500 mt-1">From OpenWiki, the free encyclopedia</div></h1><button onClick={handleAISummarize} disabled={isSummarizing} className="self-start md:self-auto mb-2 flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-200 text-teal-700 rounded-full text-xs font-medium hover:bg-teal-100 transition-colors disabled:opacity-70 shadow-sm">{isSummarizing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-teal-600" />} {isSummarizing ? 'Analyzing...' : 'Summarize Article'}</button></div>
+                                                    {summary && <div className="mb-6 p-4 bg-teal-50 border border-teal-200 rounded-lg relative animate-in fade-in slide-in-from-top-2"><button onClick={() => setSummary(null)} className="absolute top-2 right-2 p-1 text-teal-600 hover:text-teal-800 rounded-full hover:bg-teal-100"><X className="w-4 h-4" /></button><div className="flex items-center gap-2 mb-2"><Sparkles className="w-4 h-4 text-teal-600" /><h3 className="font-bold text-teal-900 text-sm uppercase tracking-wide">AI Summary</h3></div><div className="text-teal-900 text-sm leading-relaxed">{parseContent(summary)}</div></div>}
+                                                    <div className="text-gray-900 leading-relaxed font-sans text-[15px] md:text-base"><Infobox data={currentArticle.infobox} />{parseContent(currentArticle.content)}</div>
+                                                    {currentArticle.categories && <div className="mt-12 pt-4 border-t border-gray-200"><div className="bg-gray-50 border border-gray-200 p-3 rounded-sm text-sm"><span className="font-bold text-gray-600 block md:inline mb-2 md:mb-0">Categories: </span><ul className="inline-flex flex-wrap gap-2">{currentArticle.categories.map((cat, idx) => (<li key={idx} className="flex items-center"><span className="text-blue-600 hover:underline cursor-pointer">{cat}</span>{idx < currentArticle.categories.length - 1 && <span className="mx-2 text-gray-400 hidden md:inline">|</span>}</li>))}</ul></div></div>}
+                                                    <div className="mt-4 text-xs text-gray-500">This page was last edited on {currentArticle.lastEdited}.</div>
+                                                </>
+                                            ) : (
+                                                <div className="border border-gray-200 bg-gray-50 p-6 md:p-12 rounded-lg text-center mt-8 shadow-sm"><div className="bg-white inline-flex p-4 rounded-full shadow-sm mb-4"><FileText className="w-8 h-8 text-gray-400" /></div><h1 className="text-2xl font-serif font-bold text-gray-900 mb-2">Article not found</h1><p className="text-gray-600 mb-8 max-w-lg mx-auto leading-relaxed">OpenWiki does not have an article with the exact name <strong>"{currentArticle.title}"</strong>.</p><div className="flex flex-col md:flex-row justify-center gap-3"><button onClick={startEditing} className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white font-bold rounded shadow hover:bg-blue-700 transition-colors"><Edit3 className="w-4 h-4" /> Create "{currentArticle.title}"</button><button onClick={() => handleNavigate('main_page')} className="px-6 py-3 bg-white border border-gray-300 text-gray-700 font-bold rounded shadow-sm hover:bg-gray-50 transition-colors">Return to Main Page</button></div></div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                        <footer className="mt-auto bg-gray-50 border-t border-gray-200 p-6 text-sm text-gray-600"><div className="flex flex-col md:flex-row justify-between gap-6 max-w-6xl mx-auto"><div className="space-y-3"><p className="font-medium text-gray-500">OpenWiki Free Encyclopedia</p><p>Text is available under the Creative Commons Attribution-ShareAlike License.</p><div className="flex flex-wrap gap-4 text-xs md:text-sm text-blue-600"><button className="hover:underline">Privacy Policy</button><button className="hover:underline">About OpenWiki</button><button className="hover:underline">Disclaimers</button><button className="hover:underline">Mobile view</button><button className="hover:underline">Developers</button></div></div><div className="flex gap-2 justify-start md:justify-end shrink-0"><img src="https://via.placeholder.com/88x31.png?text=Powered+By+React" alt="Powered by React" className="opacity-50 grayscale hover:grayscale-0 transition-all" /></div></div></footer>
+                    </main>
+                </div>
+            );
+        }
+
+        // --- RENDER ---
+        const root = createRoot(document.getElementById('root'));
+        root.render(<WikiApp />);
+    </script>
+</body>
+</html>
